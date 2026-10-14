@@ -233,6 +233,12 @@ export const BILL_CANONICAL_SITES: BillCanonicalSite[] = [
     'Lote en Villavicencio'
   ),
   site(
+    'local-comercial-villavicencio',
+    'Local comercial Villavicencio',
+    'VILLAVICENCIO',
+    'Calle 1 sector anillo vial'
+  ),
+  site(
     'lote-tenjo',
     'Lote Siberia',
     'TENJO',

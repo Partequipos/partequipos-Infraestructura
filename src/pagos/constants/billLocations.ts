@@ -82,6 +82,7 @@ export const LEGACY_BILL_LOCATION_CATALOG: BillLocationEntry[] = [
   { city: 'BARRANQUILLA', address: 'CRA 51 NRO.96A-79 ED FENIX', businessGroup: 'WACONDA S.A.S.' },
   { city: 'BARRANQUILLA', address: 'CONDOMINIO GRATIA', businessGroup: 'WACONDA S.A.S.' },
   { city: 'VILLAVICENCIO', address: 'Lote en Villavicencio', businessGroup: 'WACONDA S.A.S.' },
+  { city: 'VILLAVICENCIO', address: 'Calle 1 sector anillo vial', businessGroup: 'WACONDA S.A.S.' },
   { city: 'BUENAVENTURA', address: 'LOTE 37', businessGroup: 'WACONDA S.A.S.' },
   { city: 'BUENAVENTURA', address: 'LOTE 38', businessGroup: 'WACONDA S.A.S.' },
   { city: 'BUENAVENTURA', address: 'LOTE 39', businessGroup: 'WACONDA S.A.S.' },
