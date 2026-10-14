@@ -308,13 +308,39 @@ CREATE POLICY "Users can view all sites"
   TO authenticated
   USING (true);
 
-CREATE POLICY "Infrastructure and admins can manage sites"
-  ON sites FOR ALL
+CREATE POLICY "Infrastructure and admins can insert sites"
+  ON sites FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'infrastructure')
+    )
+  );
+
+CREATE POLICY "Infrastructure and admins can update sites"
+  ON sites FOR UPDATE
   TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM profiles
       WHERE id = auth.uid() AND role IN ('admin', 'infrastructure')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'infrastructure')
+    )
+  );
+
+CREATE POLICY "Admins can delete sites"
+  ON sites FOR DELETE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
     )
   );
 

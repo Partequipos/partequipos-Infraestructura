@@ -78,7 +78,7 @@ router.put('/:id', authenticateToken, requireRole('admin', 'infrastructure'), as
 });
 
 // Delete site
-router.delete('/:id', authenticateToken, requireRole('admin', 'infrastructure'), async (req, res) => {
+router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { error } = await supabase.from('sites').delete().eq('id', req.params.id);
 

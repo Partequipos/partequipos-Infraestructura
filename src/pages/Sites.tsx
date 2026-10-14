@@ -219,6 +219,10 @@ export const Sites = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (profile?.role !== 'admin') {
+      return;
+    }
+
     if (globalThis.confirm('¿Estás seguro de eliminar esta sede?')) {
       const { error } = await supabase.from('sites').delete().eq('id', id);
 
@@ -246,6 +250,7 @@ export const Sites = () => {
   };
 
   const canManage = profile?.role === 'admin' || profile?.role === 'infrastructure';
+  const canDeleteSites = profile?.role === 'admin';
 
   if (loading) {
     return (
@@ -295,13 +300,15 @@ export const Sites = () => {
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleDelete(site.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canDeleteSites && (
+                      <button
+                        onClick={() => handleDelete(site.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
