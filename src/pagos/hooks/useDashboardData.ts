@@ -85,12 +85,17 @@ const buildServiceTypeData = (bills: UtilityBill[]): ServiceTypeChartItem[] =>
     });
 
     return {
+      serviceType: type,
       label: translateServiceType(type),
       value,
       consumption,
       unitOfMeasure: formatUnitsSummary(units),
     };
-  }).filter((item) => item.value > 0 || item.consumption > 0);
+  })
+    .filter((item) => item.value > 0 || item.consumption > 0)
+    .sort((left, right) =>
+      left.label.localeCompare(right.label, 'es', { sensitivity: 'base' })
+    );
 
 const buildLocationData = (bills: UtilityBill[]): LocationChartData => {
   const grouped = groupBillsByCanonicalSite(bills);
@@ -118,11 +123,9 @@ const buildLocationData = (bills: UtilityBill[]): LocationChartData => {
     };
   });
 
-  const sorted = [...entries].sort((left, right) => {
-    const totalDiff = right.total - left.total;
-    if (totalDiff !== 0) return totalDiff;
-    return left.label.localeCompare(right.label, 'es');
-  });
+  const sorted = [...entries].sort((left, right) =>
+    left.label.localeCompare(right.label, 'es', { sensitivity: 'base' })
+  );
 
   return {
     labels: sorted.map((entry) => entry.label),

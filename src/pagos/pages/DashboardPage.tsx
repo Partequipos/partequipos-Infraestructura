@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FilterX } from 'lucide-react';
 import { Button } from '../../atoms/Button';
 import { Input } from '../../atoms/Input';
@@ -6,15 +6,17 @@ import { Select } from '../../atoms/Select';
 import { useBills } from '../hooks/useBills';
 import { useDashboardComparison } from '../hooks/useDashboardComparison';
 import { useDashboardFilterOptions } from '../hooks/useDashboardFilterOptions';
+import { DashboardMultiSelect } from '../molecules/DashboardMultiSelect';
 import { KPICard } from '../molecules/KPICard';
 import { PeriodSelector } from '../molecules/PeriodSelector';
 import { RangeKeySelector } from '../molecules/RangeKeySelector';
+import { ServiceTypeDetailModal } from '../molecules/ServiceTypeDetailModal';
 import { LocationChart, ServiceTypeChart, TrendChart } from '../organisms/DashboardCharts';
 import { DashboardRangeMode, ServiceType } from '../types';
 import {
   BIMESTER_MONTHS,
-  DASHBOARD_SERVICE_TYPE_ORDER,
   filterDashboardBills,
+  getDashboardServiceTypesSorted,
   isApprovedOrPaid,
   periodsFromRangeKeys,
   QUARTER_MONTHS,
@@ -30,13 +32,10 @@ const RANGE_MODE_OPTIONS: Array<{ value: DashboardRangeMode; label: string }> = 
   { value: 'semester', label: 'Semestre' },
 ];
 
-const SERVICE_TYPE_FILTER_OPTIONS = [
-  { value: 'all', label: 'Todos los servicios' },
-  ...DASHBOARD_SERVICE_TYPE_ORDER.map((type) => ({
-    value: type,
-    label: translateServiceType(type),
-  })),
-];
+const SERVICE_TYPE_MULTI_OPTIONS = getDashboardServiceTypesSorted().map((type) => ({
+  value: type,
+  label: translateServiceType(type),
+}));
 
 const getTotalTitle = (selectedPeriods: string[]): string =>
   selectedPeriods.length === 1 ? 'Total Mensual' : 'Total Periodos';
@@ -45,8 +44,9 @@ const hasActiveDashboardFilters = ({
   rangeMode,
   selectedPeriods,
   selectedRangeKeys,
-  siteFilter,
-  serviceTypeFilter,
+  siteFilters,
+  serviceTypeFilters,
+  cityFilter,
   startDate,
   endDate,
   compareActive,
@@ -55,8 +55,9 @@ const hasActiveDashboardFilters = ({
   rangeMode: DashboardRangeMode;
   selectedPeriods: string[];
   selectedRangeKeys: string[];
-  siteFilter: string;
-  serviceTypeFilter: ServiceType | 'all';
+  siteFilters: string[];
+  serviceTypeFilters: ServiceType[];
+  cityFilter: string;
   startDate: string;
   endDate: string;
   compareActive: boolean;
@@ -65,8 +66,9 @@ const hasActiveDashboardFilters = ({
   if (rangeMode !== 'global') return true;
   if (selectedPeriods.length > 0) return true;
   if (selectedRangeKeys.length > 0) return true;
-  if (siteFilter !== 'all') return true;
-  if (serviceTypeFilter !== 'all') return true;
+  if (siteFilters.length > 0) return true;
+  if (serviceTypeFilters.length > 0) return true;
+  if (cityFilter !== 'all') return true;
   if (startDate) return true;
   if (endDate) return true;
   if (compareActive) return true;
@@ -75,21 +77,33 @@ const hasActiveDashboardFilters = ({
 
 export const DashboardPage: React.FC = () => {
   const { bills: allBills, loading, error } = useBills({ consolidated: true });
-  const { availablePeriods, availableSites, availableYears } =
-    useDashboardFilterOptions(allBills);
 
   const [rangeMode, setRangeMode] = useState<DashboardRangeMode>('global');
   const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
   const [selectedRangeKeys, setSelectedRangeKeys] = useState<string[]>([]);
   const [yearForRanges, setYearForRanges] = useState<number>(new Date().getFullYear());
-  const [siteFilter, setSiteFilter] = useState('all');
-  const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceType | 'all'>('all');
+  const [siteFilters, setSiteFilters] = useState<string[]>([]);
+  const [serviceTypeFilters, setServiceTypeFilters] = useState<ServiceType[]>([]);
+  const [cityFilter, setCityFilter] = useState('all');
   const [compareActive, setCompareActive] = useState(false);
   const [comparePeriods, setComparePeriods] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [detailServiceType, setDetailServiceType] = useState<ServiceType | null>(null);
+
+  const { availablePeriods, availableSites, availableCities, availableYears } =
+    useDashboardFilterOptions(allBills, cityFilter);
 
   const activeYear = availableYears.includes(yearForRanges) ? yearForRanges : availableYears[0];
+
+  useEffect(() => {
+    setSiteFilters((previous) => {
+      if (previous.length === 0) return previous;
+      const allowed = new Set(availableSites);
+      const next = previous.filter((site) => allowed.has(site));
+      return next.length === previous.length ? previous : next;
+    });
+  }, [availableSites]);
 
   const applyRangeKeys = (keys: string[], mode: DashboardRangeMode, year: number) => {
     setSelectedRangeKeys(keys);
@@ -117,25 +131,37 @@ export const DashboardPage: React.FC = () => {
     setSelectedPeriods(periods);
   };
 
+  const handleCityChange = (value: string) => {
+    setCityFilter(value);
+    setSiteFilters([]);
+  };
+
+  const handleServiceTypeFiltersChange = (values: string[]) => {
+    setServiceTypeFilters(values as ServiceType[]);
+  };
+
   const handleClearFilters = () => {
     setRangeMode('global');
     setSelectedPeriods([]);
     setSelectedRangeKeys([]);
     setYearForRanges(availableYears[0] ?? new Date().getFullYear());
-    setSiteFilter('all');
-    setServiceTypeFilter('all');
+    setSiteFilters([]);
+    setServiceTypeFilters([]);
+    setCityFilter('all');
     setCompareActive(false);
     setComparePeriods([]);
     setStartDate('');
     setEndDate('');
+    setDetailServiceType(null);
   };
 
   const filtersActive = hasActiveDashboardFilters({
     rangeMode,
     selectedPeriods,
     selectedRangeKeys,
-    siteFilter,
-    serviceTypeFilter,
+    siteFilters,
+    serviceTypeFilters,
+    cityFilter,
     startDate,
     endDate,
     compareActive,
@@ -150,42 +176,42 @@ export const DashboardPage: React.FC = () => {
     [startDate, endDate]
   );
 
-  const scopeFilters = useMemo(
+  const sharedFilters = useMemo(
     () => ({
-      periods: [] as string[],
-      locationFilter: siteFilter,
-      serviceType: serviceTypeFilter,
+      siteFilters,
+      serviceTypes: serviceTypeFilters,
+      cityFilter,
       ...dateRangeFilters,
     }),
-    [siteFilter, serviceTypeFilter, dateRangeFilters]
+    [siteFilters, serviceTypeFilters, cityFilter, dateRangeFilters]
   );
 
-  /** Misma sede/tipo, todos los periodos → base del % de variación. */
+  /** Misma sede/tipo/ciudad, todos los periodos → base del % de variación. */
   const baselineBills = useMemo(
-    () => filterDashboardBills(allBills, scopeFilters),
-    [allBills, scopeFilters]
+    () =>
+      filterDashboardBills(allBills, {
+        periods: [],
+        ...sharedFilters,
+      }),
+    [allBills, sharedFilters]
   );
 
   const periodBills = useMemo(
     () =>
       filterDashboardBills(allBills, {
         periods: selectedPeriods,
-        locationFilter: siteFilter,
-        serviceType: serviceTypeFilter,
-        ...dateRangeFilters,
+        ...sharedFilters,
       }),
-    [allBills, selectedPeriods, siteFilter, serviceTypeFilter, dateRangeFilters]
+    [allBills, selectedPeriods, sharedFilters]
   );
 
   const periodBillsCompare = useMemo(() => {
     if (!compareActive || comparePeriods.length === 0) return [];
     return filterDashboardBills(allBills, {
       periods: comparePeriods,
-      locationFilter: siteFilter,
-      serviceType: serviceTypeFilter,
-      ...dateRangeFilters,
+      ...sharedFilters,
     });
-  }, [allBills, compareActive, comparePeriods, siteFilter, serviceTypeFilter, dateRangeFilters]);
+  }, [allBills, compareActive, comparePeriods, sharedFilters]);
 
   const { mainData, compareData, compareTrendData, locationCompareDataAligned } =
     useDashboardComparison(
@@ -201,6 +227,19 @@ export const DashboardPage: React.FC = () => {
   const compareApprovedCount = compareData
     ? periodBillsCompare.filter((bill) => isApprovedOrPaid(bill.status)).length
     : null;
+
+  const cityOptions = useMemo(
+    () => [
+      { value: 'all', label: 'Todas las ciudades' },
+      ...availableCities.map((city) => ({ value: city, label: city })),
+    ],
+    [availableCities]
+  );
+
+  const siteMultiOptions = useMemo(
+    () => availableSites.map((siteName) => ({ value: siteName, label: siteName })),
+    [availableSites]
+  );
 
   if (loading) {
     return (
@@ -257,7 +296,7 @@ export const DashboardPage: React.FC = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-2 [&_label]:text-xs [&_label]:mb-0.5">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 [&_label]:text-xs [&_label]:mb-0.5">
           <Select
             label="Vista temporal"
             value={rangeMode}
@@ -265,43 +304,45 @@ export const DashboardPage: React.FC = () => {
             onChange={(e) => handleRangeModeChange(e.target.value as DashboardRangeMode)}
             className="py-1.5 text-sm min-h-0"
           />
-          <Select
+          <DashboardMultiSelect
             label="Tipo de servicio"
-            value={serviceTypeFilter}
-            options={SERVICE_TYPE_FILTER_OPTIONS}
-            onChange={(e) => setServiceTypeFilter(e.target.value as ServiceType | 'all')}
-            className="py-1.5 text-sm min-h-0"
+            options={SERVICE_TYPE_MULTI_OPTIONS}
+            selectedValues={serviceTypeFilters}
+            onChange={handleServiceTypeFiltersChange}
+            allLabel="Todos los servicios"
           />
           <Select
-            label="Sede"
-            value={siteFilter}
-            options={[
-              { value: 'all', label: 'Todas las sedes' },
-              ...availableSites.map((siteName) => ({ value: siteName, label: siteName })),
-            ]}
-            onChange={(e) => setSiteFilter(e.target.value)}
+            label="Ciudad"
+            value={cityFilter}
+            options={cityOptions}
+            onChange={(e) => handleCityChange(e.target.value)}
             className="py-1.5 text-sm min-h-0"
           />
-          <div className="col-span-2 lg:col-span-1 xl:col-span-2 grid grid-cols-2 gap-2">
-            <Input
-              label="Fecha inicio"
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(e) => setStartDate(e.target.value)}
-              fullWidth
-              className="py-1.5 text-sm min-h-0"
-            />
-            <Input
-              label="Fecha fin"
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(e) => setEndDate(e.target.value)}
-              fullWidth
-              className="py-1.5 text-sm min-h-0"
-            />
-          </div>
+          <DashboardMultiSelect
+            label="Sede"
+            options={siteMultiOptions}
+            selectedValues={siteFilters}
+            onChange={setSiteFilters}
+            allLabel="Todas las sedes"
+          />
+          <Input
+            label="Fecha inicio"
+            type="date"
+            value={startDate}
+            max={endDate || undefined}
+            onChange={(e) => setStartDate(e.target.value)}
+            fullWidth
+            className="py-1.5 text-sm min-h-0"
+          />
+          <Input
+            label="Fecha fin"
+            type="date"
+            value={endDate}
+            min={startDate || undefined}
+            onChange={(e) => setEndDate(e.target.value)}
+            fullWidth
+            className="py-1.5 text-sm min-h-0"
+          />
         </div>
 
         {(rangeMode !== 'global' || compareActive) && (
@@ -390,13 +431,24 @@ export const DashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <TrendChart trendData={mainData.trendData} compareData={compareTrendData} />
-        <ServiceTypeChart serviceTypeData={mainData.serviceTypeData} />
+        <ServiceTypeChart
+          serviceTypeData={mainData.serviceTypeData}
+          onBarClick={setDetailServiceType}
+        />
       </div>
 
       <LocationChart
         locationData={mainData.locationData}
         compareData={locationCompareDataAligned}
       />
+
+      {detailServiceType && (
+        <ServiceTypeDetailModal
+          serviceType={detailServiceType}
+          bills={periodBills}
+          onClose={() => setDetailServiceType(null)}
+        />
+      )}
     </div>
   );
 };

@@ -1,5 +1,7 @@
 import { ServiceType, UtilityBill } from '../types';
-import { billMatchesCanonicalSite } from './billSiteResolution';
+import { normalizeBillCity } from '../constants/billSiteRegistry';
+import { billMatchesCanonicalSite, getBillSiteDisplayName } from './billSiteResolution';
+import { translateServiceType } from './formatters';
 
 export const DASHBOARD_SERVICE_TYPE_ORDER: ServiceType[] = [
   'electricity',
@@ -18,6 +20,14 @@ export const DASHBOARD_SERVICE_TYPE_ORDER: ServiceType[] = [
   'operation_fixed_fee',
   'other',
 ];
+
+/** Tipos de servicio ordenados A–Z por etiqueta en español. */
+export const getDashboardServiceTypesSorted = (): ServiceType[] =>
+  [...DASHBOARD_SERVICE_TYPE_ORDER].sort((left, right) =>
+    translateServiceType(left).localeCompare(translateServiceType(right), 'es', {
+      sensitivity: 'base',
+    })
+  );
 
 export const QUARTER_MONTHS: Record<string, string[]> = {
   Q1: ['01', '02', '03'],
@@ -57,6 +67,17 @@ export const normalizeLocation = (location?: string | null): string => location?
 export const billMatchesLocation = (bill: UtilityBill, locationFilter: string): boolean =>
   billMatchesCanonicalSite(bill, locationFilter);
 
+export const billMatchesAnySite = (bill: UtilityBill, siteFilters: string[]): boolean => {
+  if (siteFilters.length === 0) return true;
+  const siteName = getBillSiteDisplayName(bill);
+  return siteFilters.includes(siteName);
+};
+
+export const billMatchesCity = (bill: UtilityBill, cityFilter: string): boolean => {
+  if (!cityFilter || cityFilter === 'all') return true;
+  return normalizeBillCity(bill.city) === cityFilter;
+};
+
 export const billHasServiceType = (
   bill: UtilityBill,
   serviceType: ServiceType
@@ -67,22 +88,35 @@ export const billHasServiceType = (
   return bill.serviceType === serviceType;
 };
 
+export const billHasAnyServiceType = (
+  bill: UtilityBill,
+  serviceTypes: ServiceType[]
+): boolean => {
+  if (serviceTypes.length === 0) return true;
+  return serviceTypes.some((serviceType) => billHasServiceType(bill, serviceType));
+};
+
 const sumConsumptionAmounts = (lines: UtilityBill['consumptions']): number =>
   (lines ?? []).reduce(
     (sum, line) => sum + (Number(line.totalAmount) || Number(line.value) || 0),
     0
   );
 
-/** Reduce la factura al monto/líneas del tipo filtrado (evita inflar KPIs/gráficas). */
-export const projectBillToServiceType = (
+/** Reduce la factura al monto/líneas de uno o varios tipos filtrados. */
+export const projectBillToServiceTypes = (
   bill: UtilityBill,
-  serviceType: ServiceType | 'all'
+  serviceTypes: ServiceType[]
 ): UtilityBill => {
-  if (serviceType === 'all') return bill;
+  if (serviceTypes.length === 0) return bill;
 
-  const lines = bill.consumptions?.filter((line) => line.serviceType === serviceType) ?? [];
+  const typeSet = new Set(serviceTypes);
+  const lines = bill.consumptions?.filter((line) => typeSet.has(line.serviceType)) ?? [];
+
   if (lines.length === 0) {
-    return { ...bill, serviceType, consumptions: [] };
+    if (typeSet.has(bill.serviceType)) {
+      return { ...bill, consumptions: [] };
+    }
+    return { ...bill, serviceType: serviceTypes[0], consumptions: [], totalAmount: 0, value: 0 };
   }
 
   const totalAmount = sumConsumptionAmounts(lines);
@@ -91,7 +125,7 @@ export const projectBillToServiceType = (
 
   return {
     ...bill,
-    serviceType,
+    serviceType: lines[0]?.serviceType ?? serviceTypes[0],
     provider: lines[0]?.provider ?? bill.provider,
     totalAmount,
     value: totalAmount,
@@ -101,10 +135,22 @@ export const projectBillToServiceType = (
   };
 };
 
+/** @deprecated Prefer projectBillToServiceTypes for multi-filter support. */
+export const projectBillToServiceType = (
+  bill: UtilityBill,
+  serviceType: ServiceType | 'all'
+): UtilityBill => {
+  if (serviceType === 'all') return bill;
+  return projectBillToServiceTypes(bill, [serviceType]);
+};
+
 export interface DashboardBillFilters {
   periods: string[];
-  locationFilter: string;
-  serviceType: ServiceType | 'all';
+  /** Vacío = todas las sedes. */
+  siteFilters: string[];
+  /** Vacío = todos los tipos. */
+  serviceTypes: ServiceType[];
+  cityFilter?: string;
   startDate?: string;
   endDate?: string;
 }
@@ -145,23 +191,24 @@ export const billMatchesDateRange = (
   return true;
 };
 
-/** Filtra por periodo/sede/tipo/rango de fechas y proyecta montos al tipo de servicio elegido. */
+/** Filtra por periodo/sede(s)/tipo(s)/ciudad/fechas y proyecta montos a los tipos elegidos. */
 export const filterDashboardBills = (
   bills: UtilityBill[],
   filters: DashboardBillFilters
 ): UtilityBill[] => {
-  const { periods, locationFilter, serviceType, startDate, endDate } = filters;
+  const { periods, siteFilters, serviceTypes, cityFilter, startDate, endDate } = filters;
   const periodSet = periods.length > 0 ? new Set(periods) : null;
 
   return bills
     .filter((bill) => {
       if (periodSet && !periodSet.has(bill.period)) return false;
       if (!billMatchesDateRange(bill.period, startDate, endDate)) return false;
-      if (!billMatchesLocation(bill, locationFilter)) return false;
-      if (serviceType !== 'all' && !billHasServiceType(bill, serviceType)) return false;
+      if (!billMatchesCity(bill, cityFilter ?? 'all')) return false;
+      if (!billMatchesAnySite(bill, siteFilters)) return false;
+      if (!billHasAnyServiceType(bill, serviceTypes)) return false;
       return true;
     })
-    .map((bill) => projectBillToServiceType(bill, serviceType));
+    .map((bill) => projectBillToServiceTypes(bill, serviceTypes));
 };
 
 export const formatPeriodShortLabel = (period: string): string => {
@@ -180,3 +227,60 @@ export const formatUnitsSummary = (units: Map<string, number>): string => {
 
 export const isApprovedOrPaid = (status: string): boolean =>
   status === 'approved' || status === 'paid';
+
+export interface ServiceTypeDetailRow {
+  billId: string;
+  invoiceNumber: string;
+  period: string;
+  siteName: string;
+  city: string;
+  provider: string;
+  amount: number;
+  status: string;
+}
+
+/** Detalle de montos por factura para un tipo de servicio dentro del universo filtrado. */
+export const buildServiceTypeDetailRows = (
+  bills: UtilityBill[],
+  serviceType: ServiceType
+): ServiceTypeDetailRow[] => {
+  const rows: ServiceTypeDetailRow[] = [];
+
+  bills.forEach((bill) => {
+    const lines = bill.consumptions?.filter((line) => line.serviceType === serviceType) ?? [];
+
+    if (lines.length > 0) {
+      const amount = sumConsumptionAmounts(lines);
+      rows.push({
+        billId: bill.id,
+        invoiceNumber: bill.invoiceNumber || '—',
+        period: bill.period,
+        siteName: getBillSiteDisplayName(bill),
+        city: normalizeBillCity(bill.city) || '—',
+        provider: lines[0]?.provider || bill.provider || '—',
+        amount,
+        status: bill.status,
+      });
+      return;
+    }
+
+    if (bill.serviceType !== serviceType) return;
+
+    rows.push({
+      billId: bill.id,
+      invoiceNumber: bill.invoiceNumber || '—',
+      period: bill.period,
+      siteName: getBillSiteDisplayName(bill),
+      city: normalizeBillCity(bill.city) || '—',
+      provider: bill.provider || '—',
+      amount: Number(bill.totalAmount) || 0,
+      status: bill.status,
+    });
+  });
+
+  return rows.sort((left, right) => {
+    const periodDiff = right.period.localeCompare(left.period);
+    if (periodDiff !== 0) return periodDiff;
+    return right.amount - left.amount;
+  });
+};

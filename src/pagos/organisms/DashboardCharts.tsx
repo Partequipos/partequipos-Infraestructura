@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { LocationChartData, ServiceTypeChartItem, TrendChartData } from '../types';
+import { LocationChartData, ServiceType, ServiceTypeChartItem, TrendChartData } from '../types';
 import { formatCurrency } from '../utils/formatters';
 
 interface TrendChartProps {
@@ -21,6 +21,7 @@ interface TrendChartProps {
 
 interface ServiceTypeChartProps {
   serviceTypeData: ServiceTypeChartItem[];
+  onBarClick?: (serviceType: ServiceType) => void;
 }
 
 interface LocationChartProps {
@@ -99,22 +100,48 @@ export const TrendChart: React.FC<TrendChartProps> = ({ trendData, compareData }
   );
 };
 
-export const ServiceTypeChart: React.FC<ServiceTypeChartProps> = ({ serviceTypeData }) => {
-  const rows = serviceTypeData.map((item) => ({
-    label: item.label,
-    value: item.value,
-  }));
+export const ServiceTypeChart: React.FC<ServiceTypeChartProps> = ({
+  serviceTypeData,
+  onBarClick,
+}) => {
+  const rows = [...serviceTypeData]
+    .sort((left, right) =>
+      left.label.localeCompare(right.label, 'es', { sensitivity: 'base' })
+    )
+    .map((item) => ({
+      serviceType: item.serviceType,
+      label: item.label,
+      value: item.value,
+    }));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-80">
-      <h3 className="text-sm font-semibold text-[#50504f] mb-4">Por tipo de servicio</h3>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h3 className="text-sm font-semibold text-[#50504f]">Por tipo de servicio</h3>
+        {onBarClick && (
+          <p className="text-xs text-gray-500">Clic en una barra para ver el detalle</p>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height="85%">
         <BarChart data={rows}>
           <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={60} />
           <YAxis tickFormatter={currencyTick} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(value: number) => formatCurrency(value)} />
-          <Bar dataKey="value" name="Monto" fill="#cf1b22" radius={[6, 6, 0, 0]} />
+          <Bar
+            dataKey="value"
+            name="Monto"
+            fill="#cf1b22"
+            radius={[6, 6, 0, 0]}
+            cursor={onBarClick ? 'pointer' : 'default'}
+            onClick={(data) => {
+              const row = data as { payload?: { serviceType?: ServiceType }; serviceType?: ServiceType };
+              const serviceType = row.payload?.serviceType ?? row.serviceType;
+              if (onBarClick && serviceType) {
+                onBarClick(serviceType);
+              }
+            }}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>

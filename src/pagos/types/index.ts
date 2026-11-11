@@ -147,6 +147,7 @@ export interface ChartData {
 }
 
 export interface ServiceTypeChartItem {
+  serviceType: ServiceType;
   label: string;
   value: number;
   consumption: number;
