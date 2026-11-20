@@ -280,6 +280,7 @@ export const BillForm: React.FC<BillFormProps> = ({ billId, initialData }) => {
       ...LOGISTIC_PACIFIC_PROVIDERS,
       { value: 'Dispac', label: 'Dispac' },
       { value: 'EDEQ', label: 'EDEQ - Energía del Quindío (Quindío)' },
+      { value: 'VIBRAX Estacion de energía', label: 'VIBRAX Estacion de energía' },
       MARIELA_SANABRIA_PROVIDER,
     ],
     water: [
