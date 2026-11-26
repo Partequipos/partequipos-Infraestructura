@@ -37,6 +37,13 @@ export const BILL_CANONICAL_SITES: BillCanonicalSite[] = [
     ['EL PORTAL. CALLE 35ASUR NRO. 45B -52 - MAQUINARIA', 'PORTAL 2']
   ),
   site(
+    'el-portal-casa-3',
+    'El Portal Casa 3',
+    'ENVIGADO',
+    'CALLE 35A SUR CR45B-39',
+    ['PORTAL 3', 'El Portal Casa 3']
+  ),
+  site(
     'apto-la-riviera-bogota',
     'Apto La Riviera Bogota',
     'BOGOTA',
